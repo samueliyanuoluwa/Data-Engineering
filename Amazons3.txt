@@ -1,0 +1,85 @@
+
+--Create storage integration object
+create or replace storage integration my_s3_integration
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = S3
+  ENABLED = TRUE 
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::653414718649:role/Snowflake_Aws_Integration'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://samuelarojojoyes3bucket/2024-01-17_-_Worker_and_Temporary_Worker.csv')
+  COMMENT = 'Please note that access was only given to the CSV files' ;
+
+  --drop integration s3_integration
+
+   
+/*Using the DESC INTEGRATION command to retrieve the STORAGE_AWS_IAM_USER_ARN
+and STORAGE_AWS_EXTERNAL_ID so we can update it in S3*/
+
+DESC integration my_s3_integration;
+
+--Create a database for the final detstination table
+CREATE DATABASE VISA_SPONSOR;
+CREATE SCHEMA DESTINATION;
+
+--CREATE YOUR Destination Table
+CREATE OR REPLACE TABLE VISA_SPONSOR.DESTINATION.sponsor_list(
+  organisation_name STRING,
+  town_city STRING,
+  county STRING,
+  type_rating STRING,
+  route STRING);
+
+
+     --Create a database for the staging schema
+CREATE DATABASE FILE_FORMAT_MANAGE;
+CREATE SCHEMA file_formats; --This is created for file format structure ing
+CREATE SCHEMA STG;
+ 
+--Create a file format
+CREATE OR REPLACE file format FILE_FORMAT_MANAGE.file_formats.my_csv_format
+    type = csv
+    field_delimiter = ','
+    skip_header = 1
+    null_if = ('NULL','null')
+    empty_field_as_null = TRUE
+    FIELD_OPTIONALLY_ENCLOSED_BY = '"' ;
+
+
+
+/* Create a stage(csv_folder) object that references the storage 
+integration object and the file format object*/ 
+CREATE OR REPLACE stage FILE_FORMAT_MANAGE.STG.csv_folder
+    URL ='s3://samuelarojojoyes3bucket/2024-01-17_-_Worker_and_Temporary_Worker.csv'
+    STORAGE_INTEGRATION = my_s3_integration
+    FILE_FORMAT = FILE_FORMAT_MANAGE.file_formats.my_csv_format
+    --COMMENT = 'I only gave access to the CSV file in the S3 Buckets.';
+
+--To list the staging metadata in the folder
+LIST @FILE_FORMAT_MANAGE.STG.csv_folder;
+
+
+-- Load data from staged files/folder into the target table with the Copy command.      
+COPY INTO VISA_SPONSOR.DESTINATION.sponsor_list
+FROM @FILE_FORMAT_MANAGE.STG.csv_folder;
+
+--SELECT * FROM sponsor_list
+
+-- Creating our Pipe Schema for storing all pipes
+CREATE OR REPLACE SCHEMA FILE_FORMAT_MANAGE.pipes
+
+-- Define a pipe
+CREATE OR REPLACE pipe FILE_FORMAT_MANAGE.pipes.VISA_SPONSOR_pipe
+auto_ingest = TRUE
+AS
+COPY INTO VISA_SPONSOR.DESTINATION.sponsor_list
+FROM @FILE_FORMAT_MANAGE.STG.csv_folder;
+
+/*Describe the pipe to see the code to connect the trigger Snowpipe and 
+create event notification in S3 Bucket*/
+DESC pipe FILE_FORMAT_MANAGE.pipes.VISA_SPONSOR_pipe;
+
+-- To view the status of all pipelines
+--SELECT * FROM SNOWPIPE_PIPELINES;
+
+-- To view the history of pipe executions
+--SELECT * FROM SNOWPIPE_HISTORY;
+
