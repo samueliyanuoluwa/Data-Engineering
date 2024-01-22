@@ -9,7 +9,9 @@ Before you begin, make sure you have the following:
 
 
 Setup
+
 **1. Amazon S3**
+
     Upload Data to S3 Bucket:
     Upload your CSV file(s) to an S3 bucket.
 
